@@ -235,7 +235,7 @@ CUBE_DEVICE(static void, write2x2, unsigned int &Col, unsigned int &Row, int4 *m
 
 #ifndef DP4A
 
-CUBE_KERNEL(static shared2x2, float4 *matrix_real, float4 *matrix_imag, const int Nstation, const int write)
+CUBE_KERNEL(static shared2x2, float4 *matrix_real, float4 *matrix_imag, const int Nstation, const int write, cudaTextureObject_t texObj)
 {
   CUBE_START;
 
@@ -260,7 +260,7 @@ CUBE_KERNEL(static shared2x2, float4 *matrix_real, float4 *matrix_imag, const in
   //declare shared memory for input coalescing
 
 #if SHARED_ATOMIC_SIZE == 4
-  __shared__ float input[BUFFER_DEPTH][16*TILE_WIDTH]; // 4* for float4, 4* for 2x2 tile size
+  __shared__ float input[BUFFER_DEPTH][16*TILE_WIDTH + 1]; // 4* for float4, 4* for 2x2 tile size, +1 to avoid bank conflicts
   float *input0_p = input[0] + tid;
   float *input1_p = input[1] + tid;
 #if BUFFER_DEPTH == 4
@@ -268,7 +268,7 @@ CUBE_KERNEL(static shared2x2, float4 *matrix_real, float4 *matrix_imag, const in
   float *input3_p = input[3] + tid;
 #endif // BUFFER_DEPTH==4
 #else
-  __shared__ float2 input[BUFFER_DEPTH][8*TILE_WIDTH]; // 2* for float4/float2, 4* for 2x2 tile size
+  __shared__ float2 input[BUFFER_DEPTH][8*TILE_WIDTH + 1]; // 2* for float4/float2, 4* for 2x2 tile size, +1 to avoid bank conflicts
 
 #ifdef STRUCT_OF_ARRAY
   unsigned swizzled_tid = ((tid & 0x1c) >> 1) | ((tid & 2)    << 3) | (tid & 0x21);
@@ -341,7 +341,11 @@ CUBE_KERNEL(static shared2x2, float4 *matrix_real, float4 *matrix_imag, const in
   LOAD(1, 1);
 #endif
 
-#if __CUDA_ARCH__ < 300
+#if __CUDA_ARCH__ >= 700
+#pragma unroll 4
+#elif __CUDA_ARCH__ >= 600
+#pragma unroll 3
+#elif __CUDA_ARCH__ >= 300
 #pragma unroll 2
 #else
 #pragma unroll 1
@@ -424,7 +428,7 @@ CUBE_KERNEL(static shared2x2, float4 *matrix_real, float4 *matrix_imag, const in
 
 #else // doing DP4A computation
 
-CUBE_KERNEL(static shared2x2, int4 *matrix_real, int4 *matrix_imag, const int Nstation, const int write)
+CUBE_KERNEL(static shared2x2, int4 *matrix_real, int4 *matrix_imag, const int Nstation, const int write, cudaTextureObject_t texObj)
 {
   CUBE_START;
 
@@ -449,7 +453,7 @@ CUBE_KERNEL(static shared2x2, int4 *matrix_real, int4 *matrix_imag, const int Ns
   //declare shared memory for input coalescing
 
 #if SHARED_ATOMIC_SIZE == 4
-  __shared__ int input[BUFFER_DEPTH][16*TILE_WIDTH]; // 16 = complex * pol * 2x2 tile size
+  __shared__ int input[BUFFER_DEPTH][16*TILE_WIDTH + 1]; // 16 = complex * pol * 2x2 tile size, +1 to avoid bank conflicts
   int *input0_p = input[0] + tid;
   int *input1_p = input[1] + tid;
 #if BUFFER_DEPTH == 4
@@ -510,7 +514,11 @@ CUBE_KERNEL(static shared2x2, int4 *matrix_real, int4 *matrix_imag, const int Ns
   LOAD(1, 1);
 #endif
 
-#if __CUDA_ARCH__ < 300
+#if __CUDA_ARCH__ >= 700
+#pragma unroll 4
+#elif __CUDA_ARCH__ >= 600
+#pragma unroll 3
+#elif __CUDA_ARCH__ >= 300
 #pragma unroll 2
 #else
 #pragma unroll 1

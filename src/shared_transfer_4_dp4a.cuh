@@ -8,7 +8,7 @@
 
 // Read char4 from global, write int to shared memory avoid bank conflict.
 #define LOAD(s, t)							\
-  { int2 c = tex1Dfetch(tex1dchar4, array_index + (t)*NFREQUENCY*NSTATION*NPOL); \
+  { int2 c = tex1Dfetch<int2>(texObj, array_index + (t)*NFREQUENCY*NSTATION*NPOL); \
     CUBE_ADD_BYTES(4*sizeof(ComplexInput));				\
     *(input##s##_p) = c.x;						\
     *(input##s##_p + 4*TILE_WIDTH) = c.y;}
@@ -18,12 +18,11 @@
 //#define TEXTURE_FLOAT_COORD
 #ifndef TEXTURE_FLOAT_COORD
 
-// Read float2 from global, write individual floats
-// to shared memory avoid bank conflict.
+// Read int2 from global, write individual ints
+// to shared memory avoid bank conflict.  
+// Note: Inline assembly using old texture references removed for CUDA 12+ compatibility
 #define LOAD(s, t)							\
-  {  int4 c;								\
-    asm("tex.2d.v4.s32.s32 {%0, %1, %2, %3}, [tex2dchar4, {%4, %5}];" :	\
-	"=r"(c.x), "=r"(c.y), "=r"(c.z), "=r"(c.w) : "r"(array_index), "r"(t)); \
+  { int2 c = tex2D<int2>(texObj, array_index, t);				\
     CUBE_ADD_BYTES(4*sizeof(ComplexInput));				\
     *(input##s##_p) = c.x;						\
     *(input##s##_p + 4*TILE_WIDTH) = c.y;}
@@ -33,7 +32,7 @@
 // Read char4 from global, write individual floats
 // to shared memory avoid bank conflict.
 #define LOAD(s, t)							\
-  { int2 c = tex2D(tex2dchar4, array_index, t);				\
+  { int2 c = tex2D<int2>(texObj, array_index, t);				\
     CUBE_ADD_BYTES(4*sizeof(ComplexInput));				\
     *(input##s##_p) = c.x;						\
     *(input##s##_p + 4*TILE_WIDTH) = c.y;}

@@ -10,3 +10,56 @@ src/libxgpu.so
 src/xgpuinfo
 src/xgpu_version.h
 src/Makefile.local
+
+# Test build artifacts and temporary files
+test/texture_test
+test/libxgpu.so
+test/*.o
+test/output/*.txt
+test/results_*.txt
+test/xgpu_results_*.txt
+
+# Test executables that might be created in src/
+src/texture_test
+src/texture_compatibility_test
+src/simple_test
+src/*test*
+src/run_*test*.sh
+src/test_*.sh
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Result and data files (anywhere)
+**/xgpu_results_*.txt
+**/results_*d_cuda*.txt
+**/*.log
+**/*.tmp
+
+# General result file patterns (but not in specific directories we want to track)
+/results_*.txt
+/output_*.txt
+
+# Docker testing artifacts
+docker-results/
+docker-logs/
+docker-results-*/
+docker-logs-*/
+
+# Cross-version testing artifacts
+cross-version-results/
+# Temporary test repositories
+original-xgpu/
+original-upstream-xgpu/
+
+# Test build artifacts and results
+test/*.o
+test/*.so
+test/texture_test
+test/output/
+test/cross-version-results/
+test/comprehensive-test-results/
+test/docker-results/
+test/docker-logs/
