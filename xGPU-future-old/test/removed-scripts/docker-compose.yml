@@ -1,0 +1,74 @@
+# xGPU CUDA 12.x Docker Testing Environment
+# This docker-compose file simplifies running CUDA compatibility tests
+
+version: '3.8'
+
+services:
+  # Main test service
+  xgpu-test:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: xgpu:cuda12-test
+    container_name: xgpu-cuda12-test
+    runtime: nvidia  # Requires nvidia-docker runtime
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_ARCH=sm_61  # Adjust for your GPU architecture
+      - TEXTURE_DIM=1
+    volumes:
+      # Mount results directory to host for persistence
+      - ./docker-results:/xgpu/results
+      - ./docker-logs:/xgpu/logs
+    stdin_open: true    # Keep container open for interactive use
+    tty: true          # Allocate a TTY
+    
+  # Service for interactive development/debugging
+  xgpu-dev:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: xgpu:cuda12-test
+    container_name: xgpu-cuda12-dev
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_ARCH=sm_61
+    volumes:
+      - ./docker-results:/xgpu/results
+      - ./docker-logs:/xgpu/logs
+      # Mount source for live editing (optional)
+      - ./src:/xgpu/src
+      - ./test:/xgpu/test
+    command: bash
+    stdin_open: true
+    tty: true
+
+  # Service for testing different GPU architectures
+  xgpu-test-sm75:
+    build: 
+      context: .
+      dockerfile: Dockerfile  
+    image: xgpu:cuda12-test
+    container_name: xgpu-cuda12-sm75
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_ARCH=sm_75  # For RTX 20xx series
+    volumes:
+      - ./docker-results-sm75:/xgpu/results
+      - ./docker-logs-sm75:/xgpu/logs
+
+  xgpu-test-sm80:
+    build: 
+      context: .
+      dockerfile: Dockerfile  
+    image: xgpu:cuda12-test
+    container_name: xgpu-cuda12-sm80
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_ARCH=sm_80  # For RTX 30xx series  
+    volumes:
+      - ./docker-results-sm80:/xgpu/results
+      - ./docker-logs-sm80:/xgpu/logs

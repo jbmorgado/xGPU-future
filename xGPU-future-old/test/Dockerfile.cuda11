@@ -1,0 +1,147 @@
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
+
+WORKDIR /xgpu
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    python3-pip \
+    git \
+    vim \
+    bc \
+    time \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install numpy
+
+# Copy original xGPU source
+COPY original-xgpu /xgpu
+
+# Create result and performance directories
+RUN mkdir -p /xgpu/results /xgpu/logs /xgpu/performance
+
+# Copy enhanced test files to CUDA 11.x container
+RUN mkdir -p /xgpu/test/output
+COPY test/texture_test.c /xgpu/test/
+COPY test/memory_monitor.c /xgpu/test/
+COPY test/memory_monitor.h /xgpu/test/
+COPY test/Makefile /xgpu/test/
+
+# Build enhanced test with memory monitoring for CUDA 11.x
+RUN cd /xgpu/test && \
+    make clean && \
+    make CUDA_ARCH=sm_61 texture_test
+
+# Build original xGPU library
+RUN cd /xgpu/src && \
+    make clean && \
+    make CUDA_ARCH=sm_61 libxgpu.so
+
+# Create simple test program that works with the original API
+RUN cat > /xgpu/simple_test.c << 'SIMPLE_EOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <string.h>
+#include "xgpu.h"
+
+int main() {
+    printf("Simple xGPU CUDA 11.x Test\n");
+    printf("==========================\n");
+    
+    // Get xGPU info
+    XGPUInfo info;
+    xgpuInfo(&info);
+    
+    printf("xGPU Library Configuration:\n");
+    printf("  Stations: %u\n", info.nstation);
+    printf("  Frequencies: %u\n", info.nfrequency);
+    printf("  Time samples: %u\n", info.ntime);
+    printf("  Baselines: %u\n", info.nbaseline);
+    printf("  Vector length: %llu\n", info.vecLength);
+    printf("  Matrix length: %llu\n", info.matLength);
+    
+    // Initialize XGPU context
+    XGPUContext context;
+    memset(&context, 0, sizeof(XGPUContext));
+    
+    int status = xgpuInit(&context, 0);
+    if (status != XGPU_OK) {
+        printf("Error: xgpuInit failed with status %d\n", status);
+        return 1;
+    }
+    
+    printf("\nGenerating test data...\n");
+    srand(12345);  // Set same seed as CUDA 12.x version
+    xgpuRandomComplex(context.array_h, info.vecLength);
+    
+    printf("Running correlation...\n");
+    
+    // Timing measurement
+    clock_t start_time = clock();
+    status = xgpuCudaXengine(&context, SYNCOP_DUMP);
+    clock_t end_time = clock();
+    
+    if (status != XGPU_OK) {
+        printf("Error: xgpuCudaXengine failed with status %d\n", status);
+        xgpuFree(&context);
+        return 1;
+    }
+    
+    double execution_time = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
+    printf("Execution time: %.6f seconds\n", execution_time);
+    
+    printf("\nTest completed successfully!\n");
+    
+    // Save results for the selected configuration
+    char filename[256];
+    sprintf(filename, "/xgpu/results/results_cuda11_%s.txt", getenv("SELECTED_CONFIG") ?: "large");
+    FILE *fp = fopen(filename, "w");
+    if (fp) {
+        fprintf(fp, "# xGPU CUDA 11.x Test Results - %s configuration\n", getenv("SELECTED_CONFIG") ?: "large");
+        fprintf(fp, "# Generated: %s", ctime(&(time_t){time(NULL)}));
+        fprintf(fp, "# CUDA Version: 11.x\n");
+        fprintf(fp, "# System: Linux\n");
+        fprintf(fp, "# Texture Dimension: 1\n");
+        fprintf(fp, "# Matrix Length: %llu\n", info.matLength);
+        fprintf(fp, "# Test Seed: 12345\n");
+        fprintf(fp, "# Execution Time: %.6f seconds\n", execution_time);
+        fprintf(fp, "# Data Format: index real_part imag_part\n");
+        
+        // Write the actual correlation matrix data
+        for (long long i = 0; i < info.matLength; i++) {
+            fprintf(fp, "%lld %.15e %.15e\n", i, context.matrix_h[i].real, context.matrix_h[i].imag);
+        }
+        fclose(fp);
+        printf("Results saved to %s\n", filename);
+    }
+    
+    printf("Results saved to /xgpu/results/\n");
+    
+    xgpuFree(&context);
+    return 0;
+}
+SIMPLE_EOF
+
+# Enhanced test is already built above
+
+# Set entrypoint to run the enhanced test with memory monitoring
+RUN echo '#!/bin/bash' > /xgpu/entrypoint.sh && \
+    echo 'set -e' >> /xgpu/entrypoint.sh && \
+    echo 'cd /xgpu/test' >> /xgpu/entrypoint.sh && \
+    echo 'export LD_LIBRARY_PATH=/xgpu/src:/xgpu/test:$LD_LIBRARY_PATH' >> /xgpu/entrypoint.sh && \
+    echo 'echo "Running enhanced CUDA 11.x test with memory monitoring..."' >> /xgpu/entrypoint.sh && \
+    echo 'echo "Library path: $LD_LIBRARY_PATH"' >> /xgpu/entrypoint.sh && \
+    echo './texture_test' >> /xgpu/entrypoint.sh && \
+    echo 'echo "Test execution completed, copying result files..."' >> /xgpu/entrypoint.sh && \
+    echo 'if ls output/results_*d_cuda*.txt 1> /dev/null 2>&1; then' >> /xgpu/entrypoint.sh && \
+    echo '    cp output/results_*d_cuda*.txt /xgpu/results/results_cuda11_${SELECTED_CONFIG:-deep}.txt &&' >> /xgpu/entrypoint.sh && \
+    echo '    echo "Matrix data copied successfully to results_cuda11_${SELECTED_CONFIG:-deep}.txt";' >> /xgpu/entrypoint.sh && \
+    echo 'else' >> /xgpu/entrypoint.sh && \
+    echo '    echo "Warning: No result files found in output directory" &&' >> /xgpu/entrypoint.sh && \
+    echo '    echo "# CUDA 11.x test failed - no results generated" > /xgpu/results/results_cuda11_${SELECTED_CONFIG:-deep}.txt;' >> /xgpu/entrypoint.sh && \
+    echo 'fi' >> /xgpu/entrypoint.sh && \
+    chmod +x /xgpu/entrypoint.sh
+
+ENTRYPOINT ["/xgpu/entrypoint.sh"]

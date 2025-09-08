@@ -1,0 +1,51 @@
+# Docker ignore file for xGPU
+# Excludes unnecessary files from Docker build context
+
+# Git files
+.git
+.gitignore
+
+# Documentation that's not needed in container
+*.md
+!README.md
+
+# Build artifacts (will be built fresh in container)
+src/*.o
+src/*.d
+src/*.so
+src/cuda_correlator
+src/xgpuinfo
+src/xgpu_version.h
+src/Makefile.local
+
+# Test artifacts
+test/*.o
+test/texture_test
+test/libxgpu.so
+test/output/
+
+# Docker-generated directories (host results)
+docker-results/
+docker-logs/
+docker-results-*/
+docker-logs-*/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files  
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
